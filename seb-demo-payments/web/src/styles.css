@@ -1,0 +1,6 @@
+/* gds-theme supplies every design token; this is only page chrome. */
+body {
+  margin: 0;
+  background: var(--gds-sys-color-l1-background-secondary, #f5f5f5);
+  font-family: var(--gds-sys-text-family, sans-serif);
+}

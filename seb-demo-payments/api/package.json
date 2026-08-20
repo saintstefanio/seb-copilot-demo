@@ -1,0 +1,29 @@
+{
+  "name": "@seb-demo/payments-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "openapi-typegen -i ./src/schemas/ -o ./src/schemas/",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "pretest": "npm run generate",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sebspark/openapi-core": "^4.1.21",
+    "@sebspark/openapi-express": "^5.4.17",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@sebspark/openapi-typegen": "^5.2.3",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "exports": {
+    "./schema": "./src/schemas/payments.ts"
+  }
+}

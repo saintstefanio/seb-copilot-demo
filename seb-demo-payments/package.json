@@ -1,0 +1,15 @@
+{
+  "name": "seb-demo-payments",
+  "private": true,
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "scripts": {
+    "generate": "npm run generate -w api",
+    "dev": "npm run dev -w api & npm run dev -w web",
+    "build": "npm run build -w api && npm run build -w web",
+    "test": "npm test -w api",
+    "postinstall": "npm run generate -w api"
+  }
+}

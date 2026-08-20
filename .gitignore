@@ -1,0 +1,8 @@
+.env
+.DS_Store
+node_modules
+__pycache__
+
+# clones of the upstream forks — they carry their own history, see "Git" in README
+green/
+Spark-packages/

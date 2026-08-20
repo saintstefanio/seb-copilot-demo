@@ -1,0 +1,21 @@
+diff --git a/package.json b/package.json
+index 2821baa1..d657dd48 100644
+--- a/package.json
++++ b/package.json
+@@ -70,7 +70,15 @@
+     "yaml@^2.2.2": "2.9.0"
+   },
+   "workspaces": [
+-    "packages/*"
++    "packages/openapi-core",
++    "packages/openapi-typegen",
++    "packages/openapi-express",
++    "packages/openapi-client",
++    "packages/openapi-e2e",
++    "packages/otel",
++    "packages/opentelemetry-instrumentation-opensearch",
++    "packages/retry",
++    "packages/tsconfig"
+   ],
+   "packageManager": "yarn@4.17.0+sha512.c2957de2f9025ab14d63b24d0d8be1f1655810e22c341042c27f7ecd017b180ec12db73d69ac366d71b304ef9f069349ce462de96f04f8f1da317f4f762c95ae"
+ }

@@ -1,0 +1,144 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Payments API",
+    "version": "1.0.0",
+    "description": "Accounts and transactions for the Copilot demo."
+  },
+  "paths": {
+    "/accounts": {
+      "get": {
+        "summary": "List all accounts",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountListResponse" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/accounts/:accountId/transactions": {
+      "get": {
+        "summary": "List transactions for an account",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TransactionListResponse" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "NotFound": {
+        "description": "Not Found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "stack": { "type": "string" }
+        },
+        "required": ["message"]
+      },
+      "Money": {
+        "type": "object",
+        "properties": {
+          "amount": { "type": "number" },
+          "currency": { "type": "string", "enum": ["SEK", "EUR", "USD"] }
+        },
+        "required": ["amount", "currency"]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "iban": { "type": "string" },
+          "balance": { "$ref": "#/components/schemas/Money" }
+        },
+        "required": ["id", "name", "iban", "balance"]
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "accountId": { "type": "string" },
+          "bookedAt": { "type": "string", "format": "date-time" },
+          "description": { "type": "string" },
+          "merchant": { "type": "string" },
+          "amount": { "$ref": "#/components/schemas/Money" }
+        },
+        "required": ["id", "accountId", "bookedAt", "description", "merchant", "amount"]
+      },
+      "AccountListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Account" }
+          }
+        },
+        "required": ["data"]
+      },
+      "TransactionListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Transaction" }
+          },
+          "total": { "type": "integer" }
+        },
+        "required": ["data", "total"]
+      }
+    }
+  }
+}
