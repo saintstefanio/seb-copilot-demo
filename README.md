@@ -11,10 +11,21 @@ Clone it, run it, work the ticket.
 You need **Node 22 or 24** (23 works but warns — see [Gotchas](#gotchas)),
 **Python 3.9+**, git, and about 4 GB of free disk.
 
+First fork the two upstream repos to your own account — `verify.sh` clones from
+your forks, so this is required, not optional:
+
+```sh
+gh repo fork seb-oss/green --clone=false
+gh repo fork seb-oss/Spark-packages --clone=false
+```
+
+No `gh`? Hit **Fork** on [seb-oss/green](https://github.com/seb-oss/green) and
+[seb-oss/Spark-packages](https://github.com/seb-oss/Spark-packages). Then:
+
 ```sh
 git clone https://github.com/saintstefanio/seb-copilot-demo.git
 cd seb-copilot-demo
-./verify.sh
+./verify.sh          # forked under another name? FORK_OWNER=<you> ./verify.sh
 ```
 
 That is the whole install. `verify.sh` clones the two upstream repos at pinned
@@ -94,10 +105,13 @@ This repo tracks `README.md`, `verify.sh`, `jira-connector/`,
 that carries its own `.git` produces a broken gitlink rather than a submodule,
 and a clone would come back with two empty folders.
 
-`verify.sh` reconstitutes them instead. For each, it clones from `seb-oss` at the
-exact commit in `patches/<repo>.sha`, then applies `patches/<repo>.patch` — the
-workspace and dependency trim. Pinning the commit is what keeps the patch
-applying as upstream moves on.
+`verify.sh` reconstitutes them instead. For each, it clones **your fork** at the
+exact commit in `patches/<repo>.sha`, applies `patches/<repo>.patch` — the
+workspace and dependency trim — and commits that as a branch called
+`workshop-base`. Pinning the commit is what keeps the patch applying as upstream
+moves on; cloning your fork rather than `seb-oss` is what lets you push.
+
+Forked under a different account? `FORK_OWNER=<you> ./verify.sh`.
 
 `.env` is gitignored too. Recreate it after a fresh clone; see
 [Jira credentials](#jira-credentials).
@@ -124,14 +138,44 @@ git -C green checkout package.json .nxignore
 cd green && yarn install
 ```
 
-### Forking
+### Working the ticket
 
-You only need a fork to *push ticket work* — branches, PRs, Actions and issues
-all need your own copy, not `seb-oss`:
+Prerequisite: fork both repos to your own account, once. `verify.sh` clones from
+there, and you cannot push to `seb-oss`.
 
 ```sh
-gh repo fork seb-oss/green --remote=false
-git -C green remote set-url origin git@github.com:<you>/green.git
+gh repo fork seb-oss/green --clone=false
+gh repo fork seb-oss/Spark-packages --clone=false
+```
+
+The ticket is implemented **inside `green/` or `Spark-packages/`** — not in this
+repo. This one only ships `verify.sh` and `patches/`, so nothing you build for
+the ticket belongs here and no PR is ever opened against it.
+
+`verify.sh` leaves each fork on a `workshop-base` branch with the trim committed.
+Branch off that:
+
+```sh
+cd green
+git checkout -b feat/gds-your-component
+# ... implement, including the story, the React wrapper and the changeset
+git add -A && git commit -m "feat(core): add gds-your-component"
+git push -u origin feat/gds-your-component
+```
+
+Open the PR **against `workshop-base` in your own fork**, not against `main` and
+not against `seb-oss`. That is the point of the base branch: the trim is already
+in it, so the PR diff is exactly your work. Target `main` instead and the PR also
+proposes deleting Angular, Next and 88 dependencies.
+
+`yarn.lock` is added to `.git/info/exclude` in each clone, since `yarn install`
+rewrites it and the ticket does not need it.
+
+If you genuinely want to send something upstream — one of the bugs below, say —
+branch from the pinned commit rather than from `workshop-base`:
+
+```sh
+git checkout -b fix/upstream-thing $(cat ../patches/green.sha)
 ```
 
 ## Copilot config
@@ -148,7 +192,7 @@ git -C green remote set-url origin git@github.com:<you>/green.git
 - **Node 23** — green's `jest-diff` refuses to install (it allows 18/20/22/24+).
   `verify.sh` passes `--ignore-engines`; Node 22 or 24 fixes it properly.
 - **Fork before you push.** Issues, branches, Actions and PRs all need your own
-  copy, not `seb-oss` — see [Forking](#forking).
+  copy, not `seb-oss` — see [Working the ticket](#working-the-ticket).
 - **Jira lives in project `KAN`** (*Front-End Dev*). `KAN-1`–`KAN-6` are
   connector fixtures — a story with subtasks and two bugs — there to give the
   skill something to read. File your own ticket for whatever you want the

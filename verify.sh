@@ -38,20 +38,30 @@ wait_for() { # url, seconds
 }
 
 # ---------------------------------------------------------------- clone
-# The forks are separate repos, not vendored here. We clone upstream at the exact
-# commit the trim was built against, then apply it from patches/. Pinning is what
-# keeps the patch applying — upstream moves, the pinned commit does not.
+# The two big repos are not vendored here. We clone YOUR forks at the exact
+# commit the trim was built against, apply patches/, and commit that as
+# "workshop-base". Cloning your fork (not seb-oss) is what lets you push
+# branches and open PRs. Override the owner if you forked under another account.
 # ponytail: patches carry package.json/.nxignore only, not yarn.lock (800 KB of
 # churn that rots). yarn regenerates the lock from the trimmed package.json.
-# To refresh after an upstream bump: bump the .sha, re-run, regenerate the patch.
-clone_fork() { # dir
+owner=${FORK_OWNER:-saintstefanio}
+
+clone_fork() { # repo
   local repo=$1 sha; sha=$(cat "$root/patches/$repo.sha")
-  [ -d "$repo" ] && return 0
   git clone --filter=blob:none --no-checkout \
-      "https://github.com/seb-oss/$repo.git" "$repo" >/dev/null 2>&1 &&
-    git -C "$repo" checkout -q "$sha" &&
-    git -C "$repo" apply "$root/patches/$repo.patch"
+    "https://github.com/$owner/$repo.git" "$repo" || return 1
+  # a real branch, not a detached HEAD — commits here would otherwise be
+  # unreachable the moment you check anything else out
+  git -C "$repo" checkout -q -B workshop-base "$sha" || return 1
+  git -C "$repo" apply "$root/patches/$repo.patch" || return 1
+  # the trim lands as the base commit, so your feature branch diffs clean
+  # against it and the PR shows only your work
+  git -C "$repo" -c user.name=workshop -c user.email=workshop@localhost \
+    commit -aqm "Workshop trim — base for the ticket, not for upstream" || return 1
+  # yarn rewrites the lock during install; keep it out of your commits
+  echo yarn.lock >> "$repo/.git/info/exclude"
 }
+
 for repo in green Spark-packages; do
   [ -d "$repo" ] || check "clone + trim $repo" "clone-$repo" clone_fork "$repo"
 done
