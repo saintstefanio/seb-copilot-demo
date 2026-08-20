@@ -38,28 +38,26 @@ wait_for() { # url, seconds
 }
 
 # ---------------------------------------------------------------- clone
-# The two big repos are not vendored here. We clone YOUR forks at the exact
-# commit the trim was built against, apply patches/, and commit that as
-# "workshop-base". Cloning your fork (not seb-oss) is what lets you push
-# branches and open PRs. Override the owner if you forked under another account.
+# green and Spark-packages are not vendored here. Clone them at the pinned
+# commit, apply the trim from patches/, and commit it as "workshop-base" so a
+# feature branch diffs clean against it.
 # ponytail: patches carry package.json/.nxignore only, not yarn.lock (800 KB of
 # churn that rots). yarn regenerates the lock from the trimmed package.json.
-owner=${FORK_OWNER:-saintstefanio}
-
 clone_fork() { # repo
   local repo=$1 sha; sha=$(cat "$root/patches/$repo.sha")
   git clone --filter=blob:none --no-checkout \
-    "https://github.com/$owner/$repo.git" "$repo" || return 1
-  # a real branch, not a detached HEAD — commits here would otherwise be
-  # unreachable the moment you check anything else out
+    "https://github.com/${FORK_OWNER:-seb-oss}/$repo.git" "$repo" || return 1
+  # a real branch — commits on a detached HEAD go unreachable
   git -C "$repo" checkout -q -B workshop-base "$sha" || return 1
   git -C "$repo" apply "$root/patches/$repo.patch" || return 1
-  # the trim lands as the base commit, so your feature branch diffs clean
-  # against it and the PR shows only your work
   git -C "$repo" -c user.name=workshop -c user.email=workshop@localhost \
     commit -aqm "Workshop trim — base for the ticket, not for upstream" || return 1
-  # yarn rewrites the lock during install; keep it out of your commits
-  echo yarn.lock >> "$repo/.git/info/exclude"
+  echo yarn.lock >> "$repo/.git/info/exclude"   # yarn install rewrites it
+  # Pushing needs a fork. Do it here if gh is authenticated, otherwise skip —
+  # you only need it at PR time, and the README says how.
+  if [ -z "${FORK_OWNER:-}" ] && gh auth status >/dev/null 2>&1; then
+    ( cd "$repo" && gh repo fork --remote --remote-name origin ) >/dev/null 2>&1 || true
+  fi
 }
 
 for repo in green Spark-packages; do
