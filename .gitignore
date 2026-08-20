@@ -1,8 +1,14 @@
+# secrets — match .env, env, .env.local, prod.env, …
 .env
+env
+*.env
+.env.*
+!.env.example
+
 .DS_Store
 node_modules
 __pycache__
 
-# clones of the upstream forks — they carry their own history, see "Git" in README
+# clones of the upstream repos — reconstituted by verify.sh, see "Git" in README
 green/
 Spark-packages/

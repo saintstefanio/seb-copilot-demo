@@ -1,19 +1,25 @@
 # SEB Copilot workshop
 
-Three repos wired together so you can try GitHub Copilot's customisation
+Four directories wired together so you can try GitHub Copilot's customisation
 surface — instructions, prompts, custom agents, skills, MCP — on real SEB open
 source code instead of a toy app.
 
-Fork it, run it, work the ticket.
+Clone it, run it, work the ticket.
 
-## Run it
+## Install
+
+You need **Node 22 or 24** (23 works but warns — see [Gotchas](#gotchas)),
+**Python 3.9+**, git, and about 4 GB of free disk.
 
 ```sh
+git clone https://github.com/saintstefanio/seb-copilot-demo.git
+cd seb-copilot-demo
 ./verify.sh
 ```
 
-Installs everything, runs each repo's tests, starts all three servers, opens the
-browser. Ctrl-C stops everything.
+That is the whole install. `verify.sh` clones the two upstream repos at pinned
+commits and applies the trim, installs every dependency, runs each repo's tests,
+starts three servers and opens the browser. Ctrl-C stops all of it.
 
 | | |
 |---|---|
@@ -21,8 +27,35 @@ browser. Ctrl-C stops everything.
 | http://localhost:3001/accounts | payments API |
 | http://localhost:4400 | green Storybook |
 
-First run ~4 min (mostly green), after that ~2 min. Storybook's cold build is
-slow — start it before you need it.
+First run pulls ~2 GB and takes several minutes — green dominates it, and its
+lockfile is resolved fresh against the trimmed `package.json`. After that it is
+~2 min. Storybook's cold build is the slow part; start it before you need it.
+
+Re-running is safe: anything already on disk is skipped. To start clean, delete
+`green/`, `Spark-packages/` and the `node_modules` folders and run it again.
+
+### Jira credentials
+
+Only the Jira skill needs these — `verify.sh` does not. The connector reads the
+environment directly, so a `.env` file is **not** picked up on its own:
+
+```sh
+export JIRA_BASE_URL="https://<you>.atlassian.net"
+export JIRA_EMAIL="you@example.com"
+export JIRA_API_TOKEN="<token>"
+```
+
+Put them in `~/.zshrc` to persist. Token scope and handling:
+`jira-connector/README.md`.
+
+### Using Claude Code instead of Copilot
+
+Claude Code does not read `.github/skills/`. Symlink it once:
+
+```sh
+mkdir -p jira-connector/.claude/skills
+ln -s ../../.github/skills/jira jira-connector/.claude/skills/jira
+```
 
 ## The repos
 
@@ -55,31 +88,24 @@ a file you can read end to end before you let an agent near your Jira. Same
 
 ## Git
 
-This is one repo: `README.md`, `verify.sh`, `jira-connector`, `seb-demo-payments`
-and `patches/`. The two forks are **not** in it — `.gitignore` skips them, since
-staging a directory that has its own `.git` makes a broken gitlink rather than a
-submodule, and a clone would come back with two empty folders.
+This repo tracks `README.md`, `verify.sh`, `jira-connector/`,
+`seb-demo-payments/` and `patches/` — about 8 000 lines. `green` and
+`Spark-packages` are **not** in it. `.gitignore` skips them: staging a directory
+that carries its own `.git` produces a broken gitlink rather than a submodule,
+and a clone would come back with two empty folders.
 
-`verify.sh` reconstitutes them instead. It clones each fork from `seb-oss` at the
-exact commit in `patches/*.sha`, then applies `patches/*.patch` — the workspace
-and dependency trim. Pinning the commit is what keeps the patch applying as
-upstream moves on.
+`verify.sh` reconstitutes them instead. For each, it clones from `seb-oss` at the
+exact commit in `patches/<repo>.sha`, then applies `patches/<repo>.patch` — the
+workspace and dependency trim. Pinning the commit is what keeps the patch
+applying as upstream moves on.
 
-```sh
-git init
-git add .
-git status         # .env, green/ and Spark-packages/ must NOT be listed
-git commit -m "SEB Copilot workshop"
-git remote add origin https://github.com/saintstefanio/seb-copilot-demo.git
-git push -u origin main
-```
-
-That is the whole thing. Cloning it fresh and running `./verify.sh` rebuilds all
-four directories from scratch.
+`.env` is gitignored too. Recreate it after a fresh clone; see
+[Jira credentials](#jira-credentials).
 
 ### Changing the trim
 
-Edit `green/package.json` (or `.nxignore`) in place, then regenerate its patch:
+Edit `green/package.json` or `green/.nxignore` in place, then regenerate the
+patch:
 
 ```sh
 git -C green diff -- . ':!yarn.lock' > patches/green.patch
@@ -88,20 +114,20 @@ git -C green diff -- . ':!yarn.lock' > patches/green.patch
 `yarn.lock` is deliberately excluded — 800 KB of churn that goes stale on every
 upstream bump. `yarn install` regenerates it from the trimmed `package.json`.
 
-To take an upstream update, bump `patches/green.sha` to the new commit, delete
+To take an upstream update: put the new commit in `patches/green.sha`, delete
 `green/`, re-run `./verify.sh`, and fix the patch if it rejects.
 
-To drop the trim entirely and get the full monorepo back:
+To drop the trim and get the full monorepo back:
 
 ```sh
 git -C green checkout package.json .nxignore
-git -C green yarn install
+cd green && yarn install
 ```
 
 ### Forking
 
-You only need forks to *push ticket work* — branches, PRs, Actions and issues all
-need your own copy, not `seb-oss`:
+You only need a fork to *push ticket work* — branches, PRs, Actions and issues
+all need your own copy, not `seb-oss`:
 
 ```sh
 gh repo fork seb-oss/green --remote=false
@@ -122,13 +148,11 @@ git -C green remote set-url origin git@github.com:<you>/green.git
 - **Node 23** — green's `jest-diff` refuses to install (it allows 18/20/22/24+).
   `verify.sh` passes `--ignore-engines`; Node 22 or 24 fixes it properly.
 - **Fork before you push.** Issues, branches, Actions and PRs all need your own
-  copy, not `seb-oss` — see [Git](#git).
+  copy, not `seb-oss` — see [Forking](#forking).
 - **Jira lives in project `KAN`** (*Front-End Dev*). `KAN-1`–`KAN-6` are
   connector fixtures — a story with subtasks and two bugs — there to give the
   skill something to read. File your own ticket for whatever you want the
   workshop to build.
-- **Claude Code doesn't read `.github/skills/`.** Symlink it:
-  `ln -s ../../.github/skills/jira jira-connector/.claude/skills/jira`.
 
 <details>
 <summary><b>What was changed in the forks</b></summary>
@@ -140,7 +164,10 @@ workspace globs and dependency lists, all revertable with `git checkout`.
 |---|---|---|
 | green `node_modules` | 2.1 GB | 998 MB |
 | Spark `node_modules` | 1.0 GB | 636 MB |
-| green cold install | 466s | 181s |
+| green cold install | 466s | 181s\* |
+
+\* measured with a matching lockfile committed. `verify.sh` resolves the lock
+fresh from the trimmed `package.json`, so a first run is slower than this.
 
 - `green/package.json` — 220 → 132 deps (dropped Angular, Next, mermaid,
   webpack, web-test-runner, charts). Workspaces narrowed to `core, react,
