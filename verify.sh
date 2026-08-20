@@ -41,18 +41,13 @@ wait_for() { # url, seconds
 # green and Spark-packages are not vendored here. Clone them at the pinned
 # commit, apply the trim from patches/, and commit it as "workshop-base" so a
 # feature branch diffs clean against it.
-# ponytail: patches carry package.json/.nxignore only, not yarn.lock (800 KB of
-# churn that rots). yarn regenerates the lock from the trimmed package.json.
 clone_fork() { # repo
   local repo=$1 sha; sha=$(cat "$root/patches/$repo.sha")
   git clone --filter=blob:none --no-checkout \
     "https://github.com/${FORK_OWNER:-seb-oss}/$repo.git" "$repo" || return 1
-  # a real branch — commits on a detached HEAD go unreachable
-  git -C "$repo" checkout -q -B workshop-base "$sha" || return 1
+  git -C "$repo" checkout -q "$sha" || return 1
   git -C "$repo" apply "$root/patches/$repo.patch" || return 1
-  git -C "$repo" -c user.name=workshop -c user.email=workshop@localhost \
-    commit -aqm "Workshop trim — base for the ticket, not for upstream" || return 1
-  echo yarn.lock >> "$repo/.git/info/exclude"   # yarn install rewrites it
+  baseline "$repo" || return 1
   # Pushing needs a fork. Do it here if gh is authenticated, otherwise skip —
   # you only need it at PR time, and the README says how.
   if [ -z "${FORK_OWNER:-}" ] && gh auth status >/dev/null 2>&1; then
@@ -60,8 +55,26 @@ clone_fork() { # repo
   fi
 }
 
+# Put the trim on a real branch and commit it, so the worktree reads clean and
+# your ticket shows up as your changes, not the trim's. Also repairs an older
+# clone that still has the trim sitting uncommitted on a detached HEAD.
+baseline() { # repo
+  local repo=$1
+  # a real branch — commits on a detached HEAD go unreachable
+  git -C "$repo" checkout -q -B workshop-base || return 1
+  git -C "$repo" diff --quiet ||
+    git -C "$repo" -c user.name=workshop -c user.email=workshop@localhost \
+      commit -aqm "Workshop trim — base for the ticket, not for upstream" || return 1
+  # yarn.lock is tracked, so info/exclude cannot hide it — skip-worktree can
+  git -C "$repo" update-index --skip-worktree yarn.lock
+}
+
 for repo in green Spark-packages; do
-  [ -d "$repo" ] || check "clone + trim $repo" "clone-$repo" clone_fork "$repo"
+  if [ ! -d "$repo" ]; then
+    check "clone + trim $repo" "clone-$repo" clone_fork "$repo"
+  elif ! git -C "$repo" rev-parse --verify -q workshop-base >/dev/null; then
+    check "baseline $repo" "baseline-$repo" baseline "$repo"
+  fi
 done
 
 # ---------------------------------------------------------------- install
