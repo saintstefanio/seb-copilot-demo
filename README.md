@@ -15,13 +15,13 @@ Done. `verify.sh` fetches the two SEB repos, installs everything, runs the tests
 starts the servers and opens the browser. Ctrl-C stops it. First run pulls ~2 GB
 and takes several minutes; after that it is ~2 min.
 
-| | |
-|---|---|
-| http://localhost:5173 | payments UI |
-| http://localhost:3001/accounts | payments API |
-| http://localhost:4400 | green Storybook |
+|                                |                 |
+| ------------------------------ | --------------- |
+| http://localhost:5173          | payments UI     |
+| http://localhost:3001/accounts | payments API    |
+| http://localhost:4400          | green Storybook |
 
-Needs Node 22 or 24 and Python 3.9+. Re-running skips whatever is already there.
+Needs Node 22 or 24. Re-running skips whatever is already there.
 
 ## The repos
 
@@ -74,12 +74,12 @@ Details in `jira-connector/README.md`.
 
 ## Copilot config
 
-| Surface | Where | Status |
-|---|---|---|
-| Repo instructions | `Spark-packages/.github/copilot-instructions.md` | upstream |
-| Path-scoped instructions | `green/.github/instructions/green.instructions.md` | upstream |
-| MCP | `green/.vscode/mcp.json` | upstream |
-| Jira skill | `jira-connector/.github/skills/jira/SKILL.md` | Copilot and Claude Code |
+| Surface                  | Where                                                | Status                  |
+| ------------------------ | ---------------------------------------------------- | ----------------------- |
+| Repo instructions        | `Spark-packages/.github/copilot-instructions.md`   | upstream                |
+| Path-scoped instructions | `green/.github/instructions/green.instructions.md` | upstream                |
+| MCP                      | `green/.vscode/mcp.json`                           | upstream                |
+| Jira skill               | `jira-connector/.github/skills/jira/SKILL.md`      | Copilot and Claude Code |
 
 ## Gotchas
 
@@ -98,18 +98,17 @@ Details in `jira-connector/README.md`.
 Both forks were trimmed so install is bearable. **No source was deleted** — only
 workspace globs and dependency lists, all revertable with `git checkout`.
 
-| | before | after |
-|---|---|---|
-| green `node_modules` | 2.1 GB | 998 MB |
-| Spark `node_modules` | 1.0 GB | 636 MB |
-| green cold install | 466s | 181s\* |
+|                       | before | after  |
+| --------------------- | ------ | ------ |
+| green`node_modules` | 2.1 GB | 998 MB |
+| Spark`node_modules` | 1.0 GB | 636 MB |
+| green cold install    | 466s   | 181s\* |
 
 \* measured with a matching lockfile committed. `verify.sh` resolves the lock
 fresh from the trimmed `package.json`, so a first run is slower than this.
 
 - `green/package.json` — 220 → 132 deps (dropped Angular, Next, mermaid,
-  webpack, web-test-runner, charts). Workspaces narrowed to `core, react,
-  tokens, chlorophyll, extract, fonts, repo-tools`. Dropping mermaid means the
+  webpack, web-test-runner, charts). Workspaces narrowed to `core, react, tokens, chlorophyll, extract, fonts, repo-tools`. Dropping mermaid means the
   two Storybook docs pages that embed diagrams show the diagram source instead
   (`libs/core/.storybook/blocks/Mermaid.jsx`).
 - `green/.nxignore` — hides the unused libs and `apps/` from the Nx graph. To

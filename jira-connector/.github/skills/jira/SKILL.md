@@ -5,13 +5,14 @@ description: Read, search, comment on, update, and transition Jira Cloud issues 
 
 # Jira (no-MCP fallback)
 
-Drive Jira Cloud through `jira_connector.py`, a stdlib-only CLI in this repo.
+Drive Jira Cloud through `./jira`, a Bash-and-curl CLI in this repo. It needs no
+Python, Node, package install, or separately installed runtime.
 Prefer a Jira MCP server if one is connected; use this when none is.
 
 ## Setup check
 
 Requires three env vars: `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`.
-If a command fails with `KeyError`, one is missing — tell the user to set it
+If a command reports a missing variable, tell the user to set it
 (token from https://id.atlassian.com/manage-profile/security/api-tokens) rather
 than guessing values.
 
@@ -20,12 +21,12 @@ than guessing values.
 Run from the repo root. All output is JSON.
 
 ```sh
-python3 jira_connector.py get PROJ-123
-python3 jira_connector.py search 'project = PROJ AND status = "In Progress"'
-python3 jira_connector.py comment PROJ-123 "Deploying now."
-python3 jira_connector.py update PROJ-123 '{"summary": "New summary"}'
-python3 jira_connector.py transitions PROJ-123
-python3 jira_connector.py transition PROJ-123 31
+./jira get PROJ-123
+./jira search 'project = PROJ AND status = "In Progress"'
+./jira comment PROJ-123 "Deploying now."
+./jira update PROJ-123 '{"summary": "New summary"}'
+./jira transitions PROJ-123
+./jira transition PROJ-123 31
 ```
 
 ## Rules
@@ -42,18 +43,8 @@ python3 jira_connector.py transition PROJ-123 31
 - `search` returns 20 results by default. Narrow the JQL rather than paging.
 - Quote JQL in single quotes — it contains double quotes and `=`.
 
-## In Python instead of the CLI
-
-For an agent tool-calling loop, `jira_tools.py` exposes `TOOLS` (JSON-schema
-specs) and `dispatch(name, args)`:
-
-```python
-from jira_tools import TOOLS, dispatch
-result = dispatch("jira_get_issue", {"key": "PROJ-123"})
-```
-
 ## Using this skill in another repo
 
-Copy `SKILL.md`, `jira_connector.py`, and `jira_tools.py` into one directory
+Copy `SKILL.md` and `jira` into one directory
 under `.github/skills/jira/` (or `~/.copilot/skills/jira/`), and drop the
 "from the repo root" qualifier — the scripts sit beside `SKILL.md`.
