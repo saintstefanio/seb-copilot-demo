@@ -25,8 +25,37 @@ json_string() {
 }
 
 jira_curl() {
-  curl -fsS -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" -H "Accept: application/json" "$@"
+  curl -fsS "${jira_auth_args[@]}" -H "Accept: application/json" "$@"
 }
+
+# Reads JIRA_* keys from a .env file without executing it. Existing environment
+# variables win, so an explicit export always overrides the file.
+load_env_file() {
+  local file=$1 line key value
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    case $line in ''|'#'*) continue ;; esac
+    line=${line#export }
+    key=${line%%=*}
+    value=${line#*=}
+    [ "$key" = "$line" ] && continue
+    key=${key//[[:space:]]/}
+    case $key in JIRA_BASE_URL|JIRA_EMAIL|JIRA_API_TOKEN|JIRA_PERSONAL_ACCESS_TOKEN) ;; *) continue ;; esac
+    value=${value#"${value%%[![:space:]]*}"}
+    value=${value%"${value##*[![:space:]]}"}
+    case $value in
+      \"*\") value=${value#\"}; value=${value%\"} ;;
+      \'*\') value=${value#\'}; value=${value%\'} ;;
+    esac
+    [ -n "${!key:-}" ] || export "$key=$value"
+  done < "$file"
+}
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+for env_file in "$script_dir/.env" "$script_dir/../.env" "$PWD/.env"; do
+  load_env_file "$env_file"
+done
 
 command=${1:-}
 case "$command" in
@@ -39,45 +68,66 @@ case "$command" in
 esac
 
 : "${JIRA_BASE_URL:?Set JIRA_BASE_URL.}"
-: "${JIRA_EMAIL:?Set JIRA_EMAIL.}"
-: "${JIRA_API_TOKEN:?Set JIRA_API_TOKEN.}"
+
+# Auth mode is picked automatically: a personal access token means Jira
+# Server/Data Center (Bearer + REST v2); otherwise Jira Cloud (Basic + REST v3).
+if [ -n "${JIRA_PERSONAL_ACCESS_TOKEN:-}" ]; then
+  jira_auth_args=(-H "Authorization: Bearer ${JIRA_PERSONAL_ACCESS_TOKEN}")
+  api=2
+else
+  : "${JIRA_EMAIL:?Set JIRA_EMAIL, or set JIRA_PERSONAL_ACCESS_TOKEN for Jira Server/Data Center.}"
+  : "${JIRA_API_TOKEN:?Set JIRA_API_TOKEN, or set JIRA_PERSONAL_ACCESS_TOKEN for Jira Server/Data Center.}"
+  jira_auth_args=(-u "${JIRA_EMAIL}:${JIRA_API_TOKEN}")
+  api=3
+fi
 base_url=${JIRA_BASE_URL%/}
 
 case "$command" in
   get)
     [ "$#" -eq 2 ] || usage 1
-    jira_curl "${base_url}/rest/api/3/issue/$2?fields=summary,status,assignee,description"
+    jira_curl "${base_url}/rest/api/${api}/issue/$2?fields=summary,status,assignee,description"
     ;;
   search)
     [ "$#" -eq 2 ] || usage 1
-    jira_curl --get "${base_url}/rest/api/3/search/jql" \
-      --data-urlencode "jql=$2" \
-      --data-urlencode "maxResults=20" \
-      --data-urlencode "fields=summary" \
-      --data-urlencode "fields=status"
+    if [ "$api" = 2 ]; then
+      jira_curl --get "${base_url}/rest/api/2/search" \
+        --data-urlencode "jql=$2" \
+        --data-urlencode "maxResults=20" \
+        --data-urlencode "fields=summary,status"
+    else
+      jira_curl --get "${base_url}/rest/api/3/search/jql" \
+        --data-urlencode "jql=$2" \
+        --data-urlencode "maxResults=20" \
+        --data-urlencode "fields=summary" \
+        --data-urlencode "fields=status"
+    fi
     ;;
   comment)
     [ "$#" -eq 3 ] || usage 1
     text=$(json_string "$3")
-    body='{"body":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"'"$text"'"}]}]}}'
+    if [ "$api" = 2 ]; then
+      body='{"body":"'"$text"'"}'
+    else
+      body='{"body":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"'"$text"'"}]}]}}'
+    fi
     jira_curl -X POST -H "Content-Type: application/json" --data "$body" \
-      "${base_url}/rest/api/3/issue/$2/comment"
+      "${base_url}/rest/api/${api}/issue/$2/comment"
     ;;
   update)
     [ "$#" -eq 3 ] || usage 1
     jira_curl -X PUT -H "Content-Type: application/json" --data "{\"fields\":$3}" \
-      "${base_url}/rest/api/3/issue/$2"
+      "${base_url}/rest/api/${api}/issue/$2"
     echo '{"ok":true}'
     ;;
   transitions)
     [ "$#" -eq 2 ] || usage 1
-    jira_curl "${base_url}/rest/api/3/issue/$2/transitions"
+    jira_curl "${base_url}/rest/api/${api}/issue/$2/transitions"
     ;;
   transition)
     [ "$#" -eq 3 ] || usage 1
     [[ $3 =~ ^[0-9]+$ ]] || { echo "transition id must be numeric" >&2; exit 1; }
     jira_curl -X POST -H "Content-Type: application/json" --data "{\"transition\":{\"id\":\"$3\"}}" \
-      "${base_url}/rest/api/3/issue/$2/transitions"
+      "${base_url}/rest/api/${api}/issue/$2/transitions"
     echo '{"ok":true}'
     ;;
   *) echo "unknown command: $command" >&2; usage 1 ;;

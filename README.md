@@ -5,13 +5,23 @@ agents, skills, MCP — on real SEB open source code instead of a toy app.
 
 ## Install
 
+**macOS / Linux**
+
 ```sh
 git clone https://github.com/saintstefanio/seb-copilot-demo.git
 cd seb-copilot-demo
 ./verify.sh
 ```
 
-Done. `verify.sh` fetches the two SEB repos, installs everything, runs the tests,
+**Windows** — from PowerShell or Windows Terminal:
+
+```powershell
+git clone https://github.com/saintstefanio/seb-copilot-demo.git
+cd seb-copilot-demo
+powershell -ExecutionPolicy Bypass -File .\verify.ps1
+```
+
+Done. The script fetches the two SEB repos, installs everything, runs the tests,
 starts the servers and opens the browser. Ctrl-C stops it. First run pulls ~2 GB
 and takes several minutes; after that it is ~2 min.
 
@@ -21,7 +31,21 @@ and takes several minutes; after that it is ~2 min.
 | http://localhost:3001/accounts | payments API    |
 | http://localhost:4400          | green Storybook |
 
-Needs Node 22 or 24. Re-running skips whatever is already there.
+Re-running skips whatever is already there.
+
+`verify.sh` needs Node 22 or 24 already installed. `verify.ps1` needs nothing —
+it installs its own Node and Git, per-user and without admin, under
+`%LOCALAPPDATA%\Programs\seb-workshop`, and picks up a corporate proxy and the
+Windows certificate store on its own. It is a separate file rather than a flag
+on `verify.sh` because PowerShell refuses to run any script without a `.ps1`
+extension, so one file cannot serve both shells — the same reason Maven ships
+`mvnw` and `mvnw.cmd`.
+
+Both scripts take the same switches, in each platform's convention:
+`-SkipTests` / `--skip-tests`, `-SkipServers` / `--skip-servers`,
+`-Reinstall` / `--reinstall`, `-ForkOwner <you>` / `--fork-owner <you>`.
+Aside from the bootstrapping that only `verify.ps1` can do, the two behave
+identically and print the same output.
 
 ## The repos
 
@@ -85,6 +109,16 @@ Details in `jira-connector/README.md`.
 
 - **Node 23** — green's `jest-diff` refuses to install. `verify.sh` passes
   `--ignore-engines`; Node 22 or 24 fixes it properly.
+- **Windows** — use `verify.ps1`; it handles all of this for you. If you would
+  rather run `verify.sh` under Git Bash, two things bite:
+  - *Behind a corporate proxy*, npm and yarn 1 read `HTTP_PROXY` but corepack
+    and yarn 4 do not, so they die with `ENOTFOUND`. Both scripts wire that up
+    for you from `HTTP_PROXY`/`HTTPS_PROXY`. If TLS is intercepted you also get
+    `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` — `verify.ps1` exports the Windows
+    certificate store itself; for `verify.sh`, point `NODE_EXTRA_CA_CERTS` at a
+    PEM of the corporate root CA before running.
+  - *Defender* — nothing to do about it without admin, but excluding the repo
+    and the npm/yarn caches from real-time scanning roughly halves install time.
 - **Jira lives in project `KAN`.** `KAN-1`–`KAN-6` are connector fixtures, not
   workshop tickets. File your own.
 - **Claude Code doesn't read `.github/skills/`.** Symlink it:
@@ -124,6 +158,11 @@ fresh from the trimmed `package.json`, so a first run is slower than this.
 - `green` — `libs/react/rollup.config.mjs` calls `glob.sync` (the v10 API) but
   `glob` was never declared as a dependency; it rode on hoisting. Fixed here by
   declaring `glob: ^10.4.5`. Worth an issue.
+- `nx` — the `post-install` hook rebuilds the project graph, and on Windows it
+  pins a core at 100% for 40+ minutes (measured: 2320s of CPU, zero read ops —
+  it spins rather than doing I/O). The work is redundant, since nx rebuilds the
+  graph on demand. `verify.sh` parks `nx.json` for the length of the install so
+  the hook no-ops. Worth an issue upstream.
 - `green` — `gds-filter-chips` emits `change`, but green-core's generated React
   wrapper binds `onChange` to `input`, so the prop never fires. Affects every
   React consumer. `seb-demo-payments/web/src/App.tsx` works around it with a ref.
