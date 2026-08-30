@@ -9,10 +9,15 @@ jobs:
     permissions:
       contents: read
       issues: write
+    outputs:
+      summary: ${{ steps.codex.outputs.final-message }}
+      tokens: ${{ steps.capture.outputs.tokens }}
+      token_detail: ${{ steps.capture.outputs.token_detail }}
+      stat: ${{ steps.capture.outputs.stat }}
     steps:
       - name: Comment started
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AGENT_PAT || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -35,10 +40,12 @@ jobs:
             echo
             echo "Do not commit or push; the workflow does that."
             echo "You have no network access, so do not try to install dependencies."
+            echo "End with a short summary of what you changed and why."
             echo "If the issue is too vague to implement, change nothing and say what is missing."
           } > /tmp/prompt.txt
 
       - uses: openai/codex-action@v1
+        id: codex
         with:
           openai-api-key: ${{ secrets.AZURE_OPENAI_KEY }}
           # AZURE_OPENAI_ENDPOINT must end with "/" for this to concatenate correctly
@@ -47,14 +54,44 @@ jobs:
           permission-profile: ":workspace"
           prompt-file: /tmp/prompt.txt
 
-      # Nothing but a local diff runs after Codex: the host is in an undefined
-      # state once it exits (codex-action docs/security.md), which is why the
-      # push happens in a separate job on a clean runner.
-      - name: Capture patch
+      # Only local work runs after Codex: the host is in an undefined state once
+      # it exits (codex-action docs/security.md), which is why the push happens
+      # in a separate job on a clean runner.
+      - name: Capture patch and metrics
+        id: capture
         run: |
           git add -A
           git diff --cached --binary > /tmp/changes.patch
           git status --short
+          echo "stat=$(git diff --cached --shortstat | sed 's/^ *//')" >> "$GITHUB_OUTPUT"
+
+          # codex-action exposes no token output, so read Codex's own session
+          # log. Schema-tolerant on purpose: degrades to n/a, never fails.
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os, glob
+          best, detail = 0, ""
+          def walk(o):
+              global best, detail
+              if isinstance(o, dict):
+                  k = {x.lower() for x in o}
+                  if "total_tokens" in k or {"input_tokens", "output_tokens"} <= k:
+                      t = o.get("total_tokens") or (o.get("input_tokens", 0) or 0) + (o.get("output_tokens", 0) or 0)
+                      if isinstance(t, int) and t > best:
+                          best = t
+                          detail = "in %s / out %s / cached %s" % (
+                              o.get("input_tokens", "?"), o.get("output_tokens", "?"),
+                              o.get("cached_input_tokens", "?"))
+                  for v in o.values(): walk(v)
+              elif isinstance(o, list):
+                  for v in o: walk(v)
+          for root in filter(None, [os.environ.get("CODEX_HOME"), os.path.expanduser("~/.codex")]):
+              for f in glob.glob(os.path.join(root, "sessions", "**", "*.jsonl"), recursive=True):
+                  for line in open(f, errors="ignore"):
+                      try: walk(json.loads(line))
+                      except Exception: pass
+          print("tokens=%s" % (format(best, ",") if best else "n/a"))
+          print("token_detail=%s" % detail)
+          PY
 
       - uses: actions/upload-artifact@v4
         with:
@@ -76,12 +113,23 @@ jobs:
 
       - name: Apply and open PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AGENT_PAT || secrets.GITHUB_TOKEN }}
           TITLE: ${{ github.event.issue.title }}
           N: ${{ github.event.issue.number }}
+          SUMMARY: ${{ needs.codex.outputs.summary }}
+          TOKENS: ${{ needs.codex.outputs.tokens }}
+          TOKEN_DETAIL: ${{ needs.codex.outputs.token_detail }}
+          STAT: ${{ needs.codex.outputs.stat }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ ! -s changes.patch ]; then
-            gh issue comment "$N" --body "🤖 Agent finished without changes — see the run log for why."
+            {
+              echo "🤖 Agent finished without changes."
+              echo
+              echo "$SUMMARY"
+              echo
+              echo "> tokens \`$TOKENS\` ($TOKEN_DETAIL) · [run log]($RUN)"
+            } | gh issue comment "$N" -F -
             exit 0
           fi
           git apply changes.patch
@@ -93,7 +141,15 @@ jobs:
           git commit -m "Implement #$N: $TITLE"
           git push -u origin HEAD
           PR_URL=$(gh pr create --title "Implement #$N: $TITLE" --body "Closes #$N")
-          gh issue comment "$N" --body "🤖 Agent finished — opened $PR_URL"
+          {
+            echo "🤖 Agent finished — opened $PR_URL"
+            echo
+            echo "**What it did**"
+            echo
+            echo "$SUMMARY"
+            echo
+            echo "**Metrics** — tokens \`$TOKENS\` ($TOKEN_DETAIL) · $STAT · [run log]($RUN)"
+          } | gh issue comment "$N" -F -
 
   report_failure:
     needs: [codex, open_pr]
@@ -103,7 +159,7 @@ jobs:
       issues: write
     steps:
       - env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AGENT_PAT || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
