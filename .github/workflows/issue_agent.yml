@@ -88,7 +88,7 @@ jobs:
           rm changes.patch
           git config user.name  "codex-agent[bot]"
           git config user.email "codex-agent[bot]@users.noreply.github.com"
-          git checkout -b "agent/issue-$N"
+          git checkout -b "agent/issue-$N-$GITHUB_RUN_ID"
           git add -A
           git commit -m "Implement #$N: $TITLE"
           git push -u origin HEAD
