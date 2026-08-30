@@ -3,8 +3,66 @@ on:
   issues:
     types: [labeled]
 jobs:
-  implement:
+  codex:
     if: github.event.label.name == 'agent'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Comment started
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            --body "🤖 Agent started working on this — [run]($RUN)."
+
+      - uses: actions/checkout@v5
+
+      - name: Build prompt
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+          N: ${{ github.event.issue.number }}
+        run: |
+          {
+            echo "Implement issue #$N in this repository."
+            echo "Title: $TITLE"
+            echo
+            echo "$BODY"
+            echo
+            echo "Do not commit or push; the workflow does that."
+            echo "You have no network access, so do not try to install dependencies."
+            echo "If the issue is too vague to implement, change nothing and say what is missing."
+          } > /tmp/prompt.txt
+
+      - uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.AZURE_OPENAI_KEY }}
+          # AZURE_OPENAI_ENDPOINT must end with "/" for this to concatenate correctly
+          responses-api-endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}openai/v1/responses
+          model: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          permission-profile: ":workspace"
+          prompt-file: /tmp/prompt.txt
+
+      # Nothing but a local diff runs after Codex: the host is in an undefined
+      # state once it exits (codex-action docs/security.md), which is why the
+      # push happens in a separate job on a clean runner.
+      - name: Capture patch
+        run: |
+          git add -A
+          git diff --cached --binary > /tmp/changes.patch
+          git status --short
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: changes
+          path: /tmp/changes.patch
+
+  open_pr:
+    needs: codex
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -12,35 +70,42 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
+          name: changes
 
-      - uses: openai/codex-action@main
-        with:
-          openai-api-key: ${{ secrets.AZURE_OPENAI_KEY }}
-          # AZURE_OPENAI_ENDPOINT must end with "/" for this to concatenate correctly
-          responses-api-endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}openai/v1/responses
-          model: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
-          sandbox: workspace-write
-          prompt: |
-            Implement issue #${{ github.event.issue.number }} in this repository.
-            Title: ${{ github.event.issue.title }}
-
-            ${{ github.event.issue.body }}
-
-            Make the change and run the existing tests. Do not commit or push;
-            the workflow does that. If the issue is too vague to implement,
-            change nothing and say what is missing.
-
-      - name: Open PR
+      - name: Apply and open PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: ${{ github.event.issue.title }}
           N: ${{ github.event.issue.number }}
         run: |
-          git diff --quiet && { echo "no changes"; exit 0; }
+          if [ ! -s changes.patch ]; then
+            gh issue comment "$N" --body "🤖 Agent finished without changes — see the run log for why."
+            exit 0
+          fi
+          git apply changes.patch
+          rm changes.patch
           git config user.name  "codex-agent[bot]"
           git config user.email "codex-agent[bot]@users.noreply.github.com"
           git checkout -b "agent/issue-$N"
-          git commit -am "Implement #$N: ${{ github.event.issue.title }}"
+          git add -A
+          git commit -m "Implement #$N: $TITLE"
           git push -u origin HEAD
-          gh pr create --fill --body "Closes #$N"
+          PR_URL=$(gh pr create --title "Implement #$N: $TITLE" --body "Closes #$N")
+          gh issue comment "$N" --body "🤖 Agent finished — opened $PR_URL"
+
+  report_failure:
+    needs: [codex, open_pr]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            --body "🤖 Agent failed — [run log]($RUN)."
