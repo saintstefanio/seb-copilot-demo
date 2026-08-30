@@ -45,6 +45,8 @@ export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accountId, setAccountId] = useState<string>()
   const [error, setError] = useState<string>()
+  const [search, setSearch] = useState('')
+  const [hasNoSearchResults, setHasNoSearchResults] = useState(false)
   const chips = useRef<GdsFilterChipsElement<string>>(null)
 
   // gds-filter-chips emits `change`, but green-core's React wrapper binds
@@ -70,10 +72,11 @@ export default function App() {
   const provider = useCallback(
     async ({ page, rows }: Request) => {
       if (!accountId) return { rows: [], total: 0 }
-      const { data, total } = await getTransactions(accountId, page, rows)
+      const { data, total } = await getTransactions(accountId, page, rows, search)
+      setHasNoSearchResults(Boolean(search.trim()) && total === 0)
       return { rows: data, total }
     },
-    [accountId],
+    [accountId, search],
   )
 
   const account = accounts.find((a) => a.id === accountId)
@@ -108,15 +111,33 @@ export default function App() {
         {error && <GdsText>{error}</GdsText>}
 
         {accountId && (
-          <GdsTable
-            key={accountId}
-            headline="Transactions"
-            columns={columns}
-            data={provider}
-            density="comfortable"
-            rows={10}
-            options={[10, 20, 50]}
-          />
+          <>
+            <div className="transaction-search">
+              <label htmlFor="transaction-search">Search transactions</label>
+              <input
+                id="transaction-search"
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setSearch(value)
+                  if (!value.trim()) setHasNoSearchResults(false)
+                }}
+              />
+            </div>
+            {hasNoSearchResults && (
+              <GdsText role="status">No transactions match your search</GdsText>
+            )}
+            <GdsTable
+              key={`${accountId}-${search}`}
+              headline="Transactions"
+              columns={columns}
+              data={provider}
+              density="comfortable"
+              rows={10}
+              options={[10, 20, 50]}
+            />
+          </>
         )}
       </GdsFlex>
     </GdsTheme>

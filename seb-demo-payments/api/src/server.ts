@@ -22,6 +22,7 @@ const api: PaymentsServerPaths = {
           params.accountId,
           num(query?.page),
           num(query?.limit),
+          query?.q,
         )
         return [
           200,
