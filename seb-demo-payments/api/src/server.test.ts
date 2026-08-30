@@ -38,3 +38,20 @@ test('paginates', () => {
   expect(transactionsFor('acc-1', 3, 5).rows).toHaveLength(2)
   expect(transactionsFor('acc-1', 1, 5).total).toBe(12)
 })
+
+test('searches transaction description and merchant case-insensitively', () => {
+  expect(transactionsFor('acc-1', 1, 20, 'ESPRESSO').rows).toHaveLength(1)
+  expect(transactionsFor('acc-1', 1, 20, 'transfer').rows).toHaveLength(1)
+  expect(transactionsFor('acc-1', 1, 20, 'no match').total).toBe(0)
+})
+
+test('search filters before pagination', async () => {
+  const { url, close } = await listen()
+  const res = await fetch(
+    `${url}/accounts/acc-1/transactions?q=card%20purchase&page=2&limit=5`,
+  )
+  const body = await res.json()
+  expect(body.total).toBe(10)
+  expect(body.data).toHaveLength(5)
+  close()
+})
