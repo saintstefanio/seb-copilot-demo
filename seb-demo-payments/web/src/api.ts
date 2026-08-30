@@ -18,7 +18,15 @@ const get = async <T>(path: string): Promise<T> => {
 export const getAccounts = () =>
   get<Serialized<AccountListResponse>>('/accounts')
 
-export const getTransactions = (accountId: string, page: number, limit: number) =>
-  get<Serialized<TransactionListResponse>>(
-    `/accounts/${accountId}/transactions?page=${page}&limit=${limit}`,
+export const getTransactions = (
+  accountId: string,
+  page: number,
+  limit: number,
+  q: string,
+) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  if (q) params.set('q', q)
+  return get<Serialized<TransactionListResponse>>(
+    `/accounts/${accountId}/transactions?${params}`,
   )
+}

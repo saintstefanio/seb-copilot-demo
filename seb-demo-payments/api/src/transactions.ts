@@ -44,9 +44,21 @@ export const transactions: Transaction[] = raw.map(
   }),
 )
 
-export const transactionsFor = (accountId: string, page = 1, limit = 20) => {
+export const transactionsFor = (
+  accountId: string,
+  page = 1,
+  limit = 20,
+  q?: string,
+) => {
+  const search = q?.toLocaleLowerCase()
   const all = transactions
-    .filter((t) => t.accountId === accountId)
+    .filter(
+      (t) =>
+        t.accountId === accountId &&
+        (!search ||
+          t.description.toLocaleLowerCase().includes(search) ||
+          t.merchant.toLocaleLowerCase().includes(search)),
+    )
     .sort((a, b) => b.bookedAt.getTime() - a.bookedAt.getTime())
   const start = (page - 1) * limit
   return { rows: all.slice(start, start + limit), total: all.length }

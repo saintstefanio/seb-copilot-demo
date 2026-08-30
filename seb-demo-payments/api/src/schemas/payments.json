@@ -43,6 +43,13 @@
             "in": "query",
             "required": false,
             "schema": { "type": "integer" }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring to match in a transaction description or merchant.",
+            "schema": { "type": "string" }
           }
         ],
         "responses": {

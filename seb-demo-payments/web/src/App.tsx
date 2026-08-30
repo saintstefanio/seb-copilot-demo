@@ -45,7 +45,12 @@ export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accountId, setAccountId] = useState<string>()
   const [error, setError] = useState<string>()
+  const [query, setQuery] = useState('')
+  const [transactionTotal, setTransactionTotal] = useState<number>()
   const chips = useRef<GdsFilterChipsElement<string>>(null)
+  const activeSearch = useRef('')
+  const searchKey = `${accountId ?? ''}\u0000${query}`
+  activeSearch.current = searchKey
 
   // gds-filter-chips emits `change`, but green-core's React wrapper binds
   // onChange to `input` — so the prop never fires. Listen for the real event.
@@ -56,6 +61,10 @@ export default function App() {
     el.addEventListener('change', onChange)
     return () => el.removeEventListener('change', onChange)
   }, [])
+
+  useEffect(() => {
+    setTransactionTotal(undefined)
+  }, [accountId, query])
 
   useEffect(() => {
     getAccounts()
@@ -70,10 +79,11 @@ export default function App() {
   const provider = useCallback(
     async ({ page, rows }: Request) => {
       if (!accountId) return { rows: [], total: 0 }
-      const { data, total } = await getTransactions(accountId, page, rows)
+      const { data, total } = await getTransactions(accountId, page, rows, query)
+      if (activeSearch.current === searchKey) setTransactionTotal(total)
       return { rows: data, total }
     },
-    [accountId],
+    [accountId, query, searchKey],
   )
 
   const account = accounts.find((a) => a.id === accountId)
@@ -108,15 +118,30 @@ export default function App() {
         {error && <GdsText>{error}</GdsText>}
 
         {accountId && (
-          <GdsTable
-            key={accountId}
-            headline="Transactions"
-            columns={columns}
-            data={provider}
-            density="comfortable"
-            rows={10}
-            options={[10, 20, 50]}
-          />
+          <>
+            <div>
+              <label htmlFor="transaction-search">Search transactions</label>
+              <input
+                id="transaction-search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            {transactionTotal === 0 ? (
+              <GdsText>No transactions match your search</GdsText>
+            ) : (
+              <GdsTable
+                key={`${accountId}-${query}`}
+                headline="Transactions"
+                columns={columns}
+                data={provider}
+                density="comfortable"
+                rows={10}
+                options={[10, 20, 50]}
+              />
+            )}
+          </>
         )}
       </GdsFlex>
     </GdsTheme>

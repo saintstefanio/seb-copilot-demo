@@ -38,3 +38,30 @@ test('paginates', () => {
   expect(transactionsFor('acc-1', 3, 5).rows).toHaveLength(2)
   expect(transactionsFor('acc-1', 1, 5).total).toBe(12)
 })
+
+test('searches transaction descriptions and merchants case-insensitively', async () => {
+  const { url, close } = await listen()
+  const merchant = await fetch(
+    `${url}/accounts/acc-1/transactions?q=eSpReSsO`,
+  )
+  const description = await fetch(
+    `${url}/accounts/acc-1/transactions?q=transfer`,
+  )
+  const noMatch = await fetch(
+    `${url}/accounts/acc-1/transactions?q=does-not-exist`,
+  )
+
+  expect((await merchant.json()).data.map((t: { merchant: string }) => t.merchant)).toEqual([
+    'Espresso House',
+  ])
+  expect((await description.json()).data.map((t: { description: string }) => t.description)).toEqual([
+    'Transfer',
+  ])
+  expect(await noMatch.json()).toMatchObject({ data: [], total: 0 })
+  close()
+})
+
+test('paginates the filtered transaction set', () => {
+  expect(transactionsFor('acc-1', 1, 2, 'card purchase').total).toBe(11)
+  expect(transactionsFor('acc-1', 2, 10, 'card purchase').rows).toHaveLength(1)
+})
