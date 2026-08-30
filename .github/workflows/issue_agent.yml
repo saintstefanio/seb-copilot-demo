@@ -1,0 +1,46 @@
+name: Implement Issue
+on:
+  issues:
+    types: [labeled]
+jobs:
+  implement:
+    if: github.event.label.name == 'agent'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: openai/codex-action@main
+        with:
+          openai-api-key: ${{ secrets.AZURE_OPENAI_KEY }}
+          # AZURE_OPENAI_ENDPOINT must end with "/" for this to concatenate correctly
+          responses-api-endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}openai/v1/responses
+          model: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          sandbox: workspace-write
+          prompt: |
+            Implement issue #${{ github.event.issue.number }} in this repository.
+            Title: ${{ github.event.issue.title }}
+
+            ${{ github.event.issue.body }}
+
+            Make the change and run the existing tests. Do not commit or push;
+            the workflow does that. If the issue is too vague to implement,
+            change nothing and say what is missing.
+
+      - name: Open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          N: ${{ github.event.issue.number }}
+        run: |
+          git diff --quiet && { echo "no changes"; exit 0; }
+          git config user.name  "codex-agent[bot]"
+          git config user.email "codex-agent[bot]@users.noreply.github.com"
+          git checkout -b "agent/issue-$N"
+          git commit -am "Implement #$N: ${{ github.event.issue.title }}"
+          git push -u origin HEAD
+          gh pr create --fill --body "Closes #$N"
